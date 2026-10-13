@@ -1,0 +1,142 @@
+name: CI/CD
+
+# Trunk Based Development:
+#   Pull Request a main  → pruebas (check del PR)
+#   Merge/push a main    → pruebas → imagen :sha-xxxxxxx y :latest → despliegue a DEV
+#   Tag hu-XX en main    → se reetiqueta ESA MISMA imagen como :hu-XX → despliegue a CERTI
+#   (PROD se promueve a mano con el workflow "Promover a PROD")
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['hu-*']
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pruebas:
+    name: Pruebas
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos
+        run: npm run typecheck
+      - name: Pruebas de la API
+        run: npm test
+      - name: Contrato OpenAPI
+        run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml
+
+  imagen:
+    name: Construir imagen
+    needs: pruebas
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.nombre.outputs.imagen }}:sha-${{ steps.nombre.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: nombre
+        name: Nombre de la imagen (ghcr.io exige minúsculas)
+        run: |
+          echo "imagen=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aurora-vida" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.nombre.outputs.imagen }}:sha-${{ steps.nombre.outputs.sha }}
+            ${{ steps.nombre.outputs.imagen }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=Aurora Vida API
+
+  desplegar-dev:
+    name: Desplegar en DEV
+    needs: imagen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render (DEV)
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_DEV }}
+        run: bash .github/scripts/desplegar-render.sh DEV "${{ needs.imagen.outputs.ref }}"
+
+  etiquetar:
+    name: Liberar ${{ github.ref_name }}
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.etiqueta.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: etiqueta
+        name: Reetiquetar la imagen que ya pasó por main
+        run: |
+          IMAGEN="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aurora-vida"
+          SHA=$(git rev-parse --short=7 HEAD)
+          ORIGEN="${IMAGEN}:sha-${SHA}"
+          DESTINO="${IMAGEN}:${GITHUB_REF_NAME}"
+
+          # Si el tag se creó justo después del merge, la imagen puede estar construyéndose: esperamos hasta 15 min.
+          for intento in $(seq 1 30); do
+            if docker buildx imagetools inspect "$ORIGEN" > /dev/null 2>&1; then break; fi
+            if [ "$intento" -eq 30 ]; then
+              echo "::error::No existe ${ORIGEN}. En TBD solo se libera lo que ya se integró a main: el commit ${SHA} no tiene imagen."
+              exit 1
+            fi
+            echo "Esperando a que exista ${ORIGEN} (intento ${intento}/30)..."
+            sleep 30
+          done
+
+          # Misma imagen, otra etiqueta: lo que se probó en DEV es exactamente lo que llega a CERTI.
+          docker buildx imagetools create --tag "$DESTINO" "$ORIGEN"
+          echo "ref=${DESTINO}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Versión ${GITHUB_REF_NAME} liberada"
+            echo "\`${ORIGEN}\` → \`${DESTINO}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  desplegar-certi:
+    name: Desplegar en CERTI
+    needs: etiquetar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render (CERTI)
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_CERTI }}
+        run: bash .github/scripts/desplegar-render.sh CERTI "${{ needs.etiquetar.outputs.ref }}"

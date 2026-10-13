@@ -7,8 +7,9 @@ const HOY = '2026-10-13T10:00:00-05:00';
 
 function nuevaApp(modo: 'test' | 'produccion' = 'test') {
   const instancia = crearApp(leerConfig({ APP_MODE: modo, BUGS: 'ninguno' }));
-  instancia.reloj.fijar(new Date(HOY));
-  return instancia;
+  const reloj = instancia.espacios.obtener('general').reloj;
+  reloj.fijar(new Date(HOY));
+  return { ...instancia, reloj };
 }
 
 const cotizar = (app: Express, cuerpo: object) =>

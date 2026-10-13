@@ -1,31 +1,37 @@
 import { Router } from 'express';
 import { ApiError } from '../comun/errores';
-import { fechaHoraLocal, type Reloj } from '../comun/reloj';
-
-interface Dependencias {
-  reloj: Reloj;
-  /** Restaura todos los datos de prueba. */
-  reiniciarDatos: () => void;
-}
+import { fechaHoraLocal } from '../comun/reloj';
+import { espacioDe, type EspacioSemillero } from '../comun/semilleros';
 
 const ISO_CON_ZONA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
 const MENSAJE_FECHA_HORA =
   'Debe ser una fecha y hora ISO 8601 con zona horaria, por ejemplo 2026-10-13T10:00:00-05:00.';
 
-/** Endpoints de soporte de pruebas. Solo se montan con APP_MODE=test. */
-export function rutasSoporte({ reloj, reiniciarDatos }: Dependencias): Router {
+/** Restaura los datos de prueba de un semillero. */
+function reiniciarDatos(espacio: EspacioSemillero): void {
+  espacio.cotizaciones.vaciar();
+}
+
+/**
+ * Endpoints de soporte de pruebas. Solo se montan con APP_MODE=test.
+ * Afectan únicamente al semillero indicado en X-Semillero.
+ */
+export function rutasSoporte(): Router {
   const router = Router();
 
-  const estadoReloj = () => ({ fechaHora: fechaHoraLocal(reloj.ahora()), simulado: reloj.esSimulado() });
+  const estadoReloj = (e: EspacioSemillero) => ({
+    fechaHora: fechaHoraLocal(e.reloj.ahora()),
+    simulado: e.reloj.esSimulado(),
+  });
 
   // El reset restaura los datos; el reloj se mantiene como esté.
   router.post('/reset', (_req, res) => {
-    reiniciarDatos();
+    reiniciarDatos(espacioDe(res));
     res.status(204).end();
   });
 
   router.get('/reloj', (_req, res) => {
-    res.json(estadoReloj());
+    res.json(estadoReloj(espacioDe(res)));
   });
 
   router.put('/reloj', (req, res) => {
@@ -42,12 +48,13 @@ export function rutasSoporte({ reloj, reiniciarDatos }: Dependencias): Router {
     if (detalles.length) {
       throw new ApiError(400, 'VALIDACION', 'Hay datos inválidos en la solicitud.', detalles);
     }
-    reloj.fijar(new Date(valor));
-    res.json(estadoReloj());
+    const espacio = espacioDe(res);
+    espacio.reloj.fijar(new Date(valor));
+    res.json(estadoReloj(espacio));
   });
 
   router.delete('/reloj', (_req, res) => {
-    reloj.restaurar();
+    espacioDe(res).reloj.restaurar();
     res.status(204).end();
   });
 

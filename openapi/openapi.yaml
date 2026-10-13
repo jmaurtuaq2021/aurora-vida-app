@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Aurora Vida API
-  version: 1.0.0-hu01
+  version: 1.1.0-hu01
   description: |
     Contrato de la API de Aurora Vida, venta digital del seguro de vida temporal de Aurora Seguros (empresa ficticia).
 
@@ -12,6 +12,11 @@ info:
     - JSON en camelCase.
     - Todos los errores siguen el esquema `Error`.
     - Los endpoints de esta versión son públicos. Desde la HU-02, las operaciones con sesión usarán un token Bearer.
+    - **Header `X-Semillero`** (opcional, recomendado en ambientes compartidos): identifica a quien prueba.
+      Cada valor tiene sus propios datos y su propio reloj, así el reset o el cambio de fecha de uno no afecta a los demás.
+      Sin el header se usa el espacio `general`, compartido por todos.
+    - Ambientes: DEV, CERTI y PROD. La respuesta incluye el header `X-Ambiente`. En PROD no existen los endpoints de soporte de pruebas.
+    - Estado de la instancia: `GET /api/health`.
 servers:
   - url: http://localhost:3000/api/v1
     description: Ambiente local
@@ -26,9 +31,12 @@ tags:
 
 paths:
   /catalogos/plazos:
+    parameters:
+      - $ref: '#/components/parameters/Semillero'
     get:
       tags: [Catálogos]
       operationId: listarPlazos
+      x-historia: HU-01
       summary: Lista los plazos de contratación disponibles
       responses:
         '200':
@@ -46,9 +54,12 @@ paths:
                 - { valor: 20, descripcion: 20 años }
 
   /cotizaciones:
+    parameters:
+      - $ref: '#/components/parameters/Semillero'
     post:
       tags: [Cotizaciones]
       operationId: crearCotizacion
+      x-historia: HU-01
       summary: Calcula y registra una cotización
       description: Endpoint público, no requiere sesión.
       requestBody:
@@ -125,9 +136,12 @@ paths:
                 traceId: a91b4c2d
 
   /cotizaciones/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Semillero'
     get:
       tags: [Cotizaciones]
       operationId: obtenerCotizacion
+      x-historia: HU-01
       summary: Consulta una cotización
       description: Endpoint público. Una cotización vencida se puede consultar.
       parameters:
@@ -161,6 +175,8 @@ paths:
                 traceId: 5e0f12aa
 
   /test/reset:
+    parameters:
+      - $ref: '#/components/parameters/Semillero'
     servers:
       - url: http://localhost:3000/api
         description: Soporte de pruebas
@@ -173,6 +189,8 @@ paths:
           description: Datos restaurados.
 
   /test/reloj:
+    parameters:
+      - $ref: '#/components/parameters/Semillero'
     servers:
       - url: http://localhost:3000/api
         description: Soporte de pruebas
@@ -364,6 +382,19 @@ components:
         mensaje:
           type: string
           example: Debe estar entre 50,000 y 500,000 en múltiplos de 10,000.
+
+  parameters:
+    Semillero:
+      name: X-Semillero
+      in: header
+      required: false
+      description: |
+        Identificador de quien prueba (por ejemplo, tu usuario). Cada valor tiene datos y reloj propios.
+        Se normaliza a minúsculas. Sin el header se usa el espacio compartido `general`.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{1,29}$'
+        example: jperez
 
   responses:
     Validacion:

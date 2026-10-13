@@ -1,0 +1,62 @@
+name: Promover a PROD
+
+# Se ejecuta a mano desde Actions → "Promover a PROD" → Run workflow.
+# Promueve a PROD la MISMA imagen que se certificó en CERTI (no se reconstruye nada).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión certificada en CERTI (por ejemplo hu-01 o hu-01.1)'
+        required: true
+        default: 'hu-01.1'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: promover-prod
+  cancel-in-progress: false
+
+jobs:
+  promover:
+    name: Promover ${{ inputs.version }} a PROD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar la versión
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^hu-[0-9]{2}(\.[0-9]+)?$ ]]; then
+            echo "::error::La versión debe tener la forma hu-XX o hu-XX.N (por ejemplo hu-01 o hu-01.1). Recibido: ${VERSION}"
+            exit 1
+          fi
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: etiqueta
+        name: Marcar la imagen como prod
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          IMAGEN="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aurora-vida"
+          if ! docker buildx imagetools inspect "${IMAGEN}:${VERSION}" > /dev/null 2>&1; then
+            echo "::error::No existe ${IMAGEN}:${VERSION}. Solo se promueve a PROD una versión que ya pasó por CERTI."
+            exit 1
+          fi
+          docker buildx imagetools create --tag "${IMAGEN}:prod" "${IMAGEN}:${VERSION}"
+          echo "ref=${IMAGEN}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "### ${VERSION} promovida a PROD" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Render (PROD)
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
+        run: bash .github/scripts/desplegar-render.sh PROD "${{ steps.etiqueta.outputs.ref }}"
