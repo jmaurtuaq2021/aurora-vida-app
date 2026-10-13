@@ -14,9 +14,12 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 
+# Valores por defecto; cada ambiente de Render los sobrescribe
 ENV NODE_ENV=production \
     PORT=3000 \
+    AMBIENTE=LOCAL \
     APP_MODE=test \
+    FUNCIONALIDADES=todas \
     BUGS=ninguno
 
 COPY package.json package-lock.json ./

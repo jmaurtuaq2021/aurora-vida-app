@@ -1,6 +1,6 @@
 {
   "name": "aurora-vida-app",
-  "version": "1.0.0-hu01",
+  "version": "1.1.0-hu01",
   "description": "API de Aurora Vida (venta digital de seguro de vida temporal) para el semillero QE",
   "private": true,
   "type": "commonjs",

@@ -2,8 +2,9 @@ import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { ApiError } from '../comun/errores';
 import { sumarDias, type Reloj } from '../comun/reloj';
+import { espacioDe } from '../comun/semilleros';
 import { edadCumplida } from './edad';
-import type { CotizacionGuardada, RepositorioCotizaciones } from './repositorio';
+import type { CotizacionGuardada } from './repositorio';
 import {
   aMonto,
   calcularPrimas,
@@ -15,32 +16,29 @@ import {
 
 const DIAS_VIGENCIA_COTIZACION = 30; // RN-19
 
-interface Dependencias {
-  reloj: Reloj;
-  repositorio: RepositorioCotizaciones;
-}
+const aRespuesta = (c: CotizacionGuardada, reloj: Reloj) => ({
+  id: c.id,
+  fechaCotizacion: c.fechaCotizacion,
+  fechaVencimiento: c.fechaVencimiento,
+  // Vigente hasta el último día inclusive (RN-19)
+  vigente: reloj.hoy() <= c.fechaVencimiento,
+  fechaNacimiento: c.fechaNacimiento,
+  edadActuarial: c.edadActuarial,
+  fumador: c.fumador,
+  sumaAsegurada: c.sumaAsegurada,
+  plazo: c.plazo,
+  primaNetaAnual: c.primaNetaAnual,
+  primaTotalAnual: c.primaTotalAnual,
+  primaMensual: c.primaMensual,
+});
 
-export function rutasCotizaciones({ reloj, repositorio }: Dependencias): Router {
+/** HU-01: cotizaciones. Cada semillero usa su propio espacio (datos y reloj). */
+export function rutasCotizaciones(): Router {
   const router = Router();
-
-  const aRespuesta = (c: CotizacionGuardada) => ({
-    id: c.id,
-    fechaCotizacion: c.fechaCotizacion,
-    fechaVencimiento: c.fechaVencimiento,
-    // Vigente hasta el último día inclusive (RN-19)
-    vigente: reloj.hoy() <= c.fechaVencimiento,
-    fechaNacimiento: c.fechaNacimiento,
-    edadActuarial: c.edadActuarial,
-    fumador: c.fumador,
-    sumaAsegurada: c.sumaAsegurada,
-    plazo: c.plazo,
-    primaNetaAnual: c.primaNetaAnual,
-    primaTotalAnual: c.primaTotalAnual,
-    primaMensual: c.primaMensual,
-  });
 
   // Formato y rangos de campos (RN-12, RN-13) los valida el contrato OpenAPI antes de llegar aquí.
   router.post('/cotizaciones', (req, res) => {
+    const { reloj, cotizaciones } = espacioDe(res);
     const { fechaNacimiento, fumador, sumaAsegurada, plazo } = req.body as {
       fechaNacimiento: string;
       fumador: boolean;
@@ -72,17 +70,18 @@ export function rutasCotizaciones({ reloj, repositorio }: Dependencias): Router 
       primaTotalAnual: primas.primaTotalAnual.toNumber(),
       primaMensual: primas.primaMensual.toNumber(),
     };
-    repositorio.guardar(cotizacion);
+    cotizaciones.guardar(cotizacion);
 
-    res.status(201).location(`/api/v1/cotizaciones/${cotizacion.id}`).json(aRespuesta(cotizacion));
+    res.status(201).location(`/api/v1/cotizaciones/${cotizacion.id}`).json(aRespuesta(cotizacion, reloj));
   });
 
   router.get('/cotizaciones/:id', (req, res) => {
-    const cotizacion = repositorio.buscar(req.params.id);
+    const { reloj, cotizaciones } = espacioDe(res);
+    const cotizacion = cotizaciones.buscar(req.params.id);
     if (!cotizacion) {
       throw new ApiError(404, 'COTIZACION_NO_ENCONTRADA', 'La cotización no existe.');
     }
-    res.json(aRespuesta(cotizacion));
+    res.json(aRespuesta(cotizacion, reloj));
   });
 
   return router;
