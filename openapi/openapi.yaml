@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: Aurora Vida API
+  version: 1.0.0-hu01
+  description: |
+    Contrato de la API de Aurora Vida, venta digital del seguro de vida temporal de Aurora Seguros (empresa ficticia).
+
+    **Alcance de esta versión:** HU-01 Cotizador.
+
+    - Montos en soles (S/), con 2 decimales.
+    - Fechas en formato ISO 8601 (`AAAA-MM-DD`).
+    - JSON en camelCase.
+    - Todos los errores siguen el esquema `Error`.
+    - Los endpoints de esta versión son públicos. Desde la HU-02, las operaciones con sesión usarán un token Bearer.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Ambiente local
+security: []
+tags:
+  - name: Catálogos
+    description: Listas de valores que usa el frontend.
+  - name: Cotizaciones
+    description: Cálculo de primas del seguro de vida temporal (HU-01).
+  - name: Soporte de pruebas
+    description: Solo disponibles con APP_MODE=test. En otro modo responden 404.
+
+paths:
+  /catalogos/plazos:
+    get:
+      tags: [Catálogos]
+      operationId: listarPlazos
+      summary: Lista los plazos de contratación disponibles
+      responses:
+        '200':
+          description: Plazos disponibles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plazo'
+              example:
+                - { valor: 5, descripcion: 5 años }
+                - { valor: 10, descripcion: 10 años }
+                - { valor: 15, descripcion: 15 años }
+                - { valor: 20, descripcion: 20 años }
+
+  /cotizaciones:
+    post:
+      tags: [Cotizaciones]
+      operationId: crearCotizacion
+      summary: Calcula y registra una cotización
+      description: Endpoint público, no requiere sesión.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CotizacionRequest'
+            examples:
+              noFumador:
+                summary: 30 años, no fumador, S/ 100,000 a 10 años
+                value:
+                  fechaNacimiento: '1996-05-20'
+                  fumador: false
+                  sumaAsegurada: 100000
+                  plazo: 10
+              fumador:
+                summary: 45 años, fumador, S/ 300,000 a 20 años
+                value:
+                  fechaNacimiento: '1981-03-02'
+                  fumador: true
+                  sumaAsegurada: 300000
+                  plazo: 20
+      responses:
+        '201':
+          description: Cotización creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cotizacion'
+              examples:
+                noFumador:
+                  summary: 30 años, no fumador, S/ 100,000 a 10 años
+                  value:
+                    id: 8c1f2b7e-4d3a-4b9e-9a51-2f6c0d7e3a10
+                    fechaCotizacion: '2026-10-13'
+                    fechaVencimiento: '2026-11-12'
+                    vigente: true
+                    fechaNacimiento: '1996-05-20'
+                    edadActuarial: 30
+                    fumador: false
+                    sumaAsegurada: 100000
+                    plazo: 10
+                    primaNetaAnual: 126.00
+                    primaTotalAnual: 129.78
+                    primaMensual: 20.00
+                fumador:
+                  summary: 45 años, fumador, S/ 300,000 a 20 años
+                  value:
+                    id: 3b7d9e41-0c2a-4f6b-8e15-9d4c7a2b6f03
+                    fechaCotizacion: '2026-10-13'
+                    fechaVencimiento: '2026-11-12'
+                    vigente: true
+                    fechaNacimiento: '1981-03-02'
+                    edadActuarial: 45
+                    fumador: true
+                    sumaAsegurada: 300000
+                    plazo: 20
+                    primaNetaAnual: 1604.25
+                    primaTotalAnual: 1652.38
+                    primaMensual: 148.71
+        '400':
+          $ref: '#/components/responses/Validacion'
+        '422':
+          description: Los datos tienen el formato correcto pero incumplen una regla de negocio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: EDAD_FUERA_RANGO
+                mensaje: La edad de contratación debe estar entre 18 y 65 años.
+                detalles: []
+                traceId: a91b4c2d
+
+  /cotizaciones/{id}:
+    get:
+      tags: [Cotizaciones]
+      operationId: obtenerCotizacion
+      summary: Consulta una cotización
+      description: Endpoint público. Una cotización vencida se puede consultar.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador de la cotización.
+          schema:
+            type: string
+            format: uuid
+          example: 8c1f2b7e-4d3a-4b9e-9a51-2f6c0d7e3a10
+      responses:
+        '200':
+          description: Cotización encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cotizacion'
+        '400':
+          $ref: '#/components/responses/Validacion'
+        '404':
+          description: La cotización no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: COTIZACION_NO_ENCONTRADA
+                mensaje: La cotización no existe.
+                detalles: []
+                traceId: 5e0f12aa
+
+  /test/reset:
+    servers:
+      - url: http://localhost:3000/api
+        description: Soporte de pruebas
+    post:
+      tags: [Soporte de pruebas]
+      operationId: reiniciarDatos
+      summary: Restaura los datos de prueba
+      responses:
+        '204':
+          description: Datos restaurados.
+
+  /test/reloj:
+    servers:
+      - url: http://localhost:3000/api
+        description: Soporte de pruebas
+    get:
+      tags: [Soporte de pruebas]
+      operationId: obtenerReloj
+      summary: Devuelve la fecha y hora que usa la aplicación
+      responses:
+        '200':
+          description: Fecha y hora vigentes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reloj'
+    put:
+      tags: [Soporte de pruebas]
+      operationId: fijarReloj
+      summary: Fija una fecha y hora simulada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelojRequest'
+            example:
+              fechaHora: '2026-10-13T10:00:00-05:00'
+      responses:
+        '200':
+          description: Reloj fijado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reloj'
+        '400':
+          $ref: '#/components/responses/Validacion'
+    delete:
+      tags: [Soporte de pruebas]
+      operationId: restaurarReloj
+      summary: Vuelve al reloj real
+      responses:
+        '204':
+          description: Reloj real restaurado.
+
+components:
+  schemas:
+    Plazo:
+      type: object
+      required: [valor, descripcion]
+      properties:
+        valor:
+          type: integer
+          enum: [5, 10, 15, 20]
+        descripcion:
+          type: string
+          example: 10 años
+
+    CotizacionRequest:
+      type: object
+      additionalProperties: false
+      required: [fechaNacimiento, fumador, sumaAsegurada, plazo]
+      properties:
+        fechaNacimiento:
+          type: string
+          format: date
+          description: Fecha de nacimiento del asegurado.
+          example: '1996-05-20'
+        fumador:
+          type: boolean
+          description: Indica si el asegurado fuma.
+          example: false
+        sumaAsegurada:
+          type: integer
+          minimum: 50000
+          maximum: 500000
+          multipleOf: 10000
+          description: Monto en soles que se paga a los beneficiarios.
+          example: 100000
+        plazo:
+          type: integer
+          enum: [5, 10, 15, 20]
+          description: Duración del seguro en años.
+          example: 10
+
+    Cotizacion:
+      type: object
+      required:
+        - id
+        - fechaCotizacion
+        - fechaVencimiento
+        - vigente
+        - fechaNacimiento
+        - edadActuarial
+        - fumador
+        - sumaAsegurada
+        - plazo
+        - primaNetaAnual
+        - primaTotalAnual
+        - primaMensual
+      properties:
+        id:
+          type: string
+          format: uuid
+        fechaCotizacion:
+          type: string
+          format: date
+        fechaVencimiento:
+          type: string
+          format: date
+          description: Último día en que la cotización puede usarse para iniciar una solicitud.
+        vigente:
+          type: boolean
+          description: Falso cuando la fecha actual es posterior a fechaVencimiento.
+        fechaNacimiento:
+          type: string
+          format: date
+        edadActuarial:
+          type: integer
+          minimum: 18
+          maximum: 65
+          description: Edad usada para la tarifa.
+        fumador:
+          type: boolean
+        sumaAsegurada:
+          type: integer
+        plazo:
+          type: integer
+          enum: [5, 10, 15, 20]
+        primaNetaAnual:
+          type: number
+          format: double
+          description: Prima anual antes del derecho de emisión.
+        primaTotalAnual:
+          type: number
+          format: double
+          description: Prima anual con 3% de derecho de emisión.
+        primaMensual:
+          type: number
+          format: double
+          description: Cuota mensual con recargo por fraccionamiento.
+
+    Reloj:
+      type: object
+      required: [fechaHora, simulado]
+      properties:
+        fechaHora:
+          type: string
+          format: date-time
+          example: '2026-10-13T10:00:00-05:00'
+        simulado:
+          type: boolean
+          description: Verdadero si la fecha fue fijada con PUT /test/reloj.
+
+    RelojRequest:
+      type: object
+      additionalProperties: false
+      required: [fechaHora]
+      properties:
+        fechaHora:
+          type: string
+          format: date-time
+          example: '2026-10-13T10:00:00-05:00'
+
+    Error:
+      type: object
+      required: [codigo, mensaje, detalles, traceId]
+      properties:
+        codigo:
+          type: string
+          description: Código estable del error, en mayúsculas.
+          example: VALIDACION
+        mensaje:
+          type: string
+          description: Mensaje para mostrar al usuario.
+        detalles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetalle'
+        traceId:
+          type: string
+          description: Identificador para rastrear el error en los logs.
+
+    ErrorDetalle:
+      type: object
+      required: [campo, mensaje]
+      properties:
+        campo:
+          type: string
+          example: sumaAsegurada
+        mensaje:
+          type: string
+          example: Debe estar entre 50,000 y 500,000 en múltiplos de 10,000.
+
+  responses:
+    Validacion:
+      description: Uno o más campos tienen formato o rango inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: VALIDACION
+            mensaje: Hay datos inválidos en la solicitud.
+            detalles:
+              - campo: sumaAsegurada
+                mensaje: Debe estar entre 50,000 y 500,000 en múltiplos de 10,000.
+            traceId: 7f3c2a1e

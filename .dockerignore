@@ -1,0 +1,10 @@
+node_modules
+dist
+test
+coverage
+.git
+.github
+*.md
+Dockerfile
+.dockerignore
+vitest.config.mts
