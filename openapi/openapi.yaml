@@ -299,7 +299,7 @@ components:
         fechaVencimiento:
           type: string
           format: date
-          description: Último día en que la cotización puede usarse para iniciar una solicitud.
+          description: Fecha de cotización + 30 días calendario. La cotización es válida hasta este día inclusive; después se puede consultar, pero no usar para contratar.
         vigente:
           type: boolean
           description: Falso cuando la fecha actual es posterior a fechaVencimiento.
@@ -310,7 +310,7 @@ components:
           type: integer
           minimum: 18
           maximum: 65
-          description: Edad usada para la tarifa.
+          description: Edad cumplida a la fecha de cotización (hora de Perú). Se usa para la tarifa y queda fija en la cotización.
         fumador:
           type: boolean
         sumaAsegurada:
@@ -329,7 +329,7 @@ components:
         primaMensual:
           type: number
           format: double
-          description: Cuota mensual con recargo por fraccionamiento.
+          description: (Prima total anual + 8% de recargo por fraccionamiento) / 12. Si el cálculo es menor a S/ 20.00, se cobra S/ 20.00.
 
     Reloj:
       type: object
