@@ -3,7 +3,7 @@
 API de Aurora Vida, la web ficticia de venta de seguro de vida temporal del semillero QE.
 **Este repositorio debe ser privado**: contiene las reglas de negocio y, más adelante, los defectos sembrados.
 
-Versión actual: **1.1.0-hu01** (HU-01 Cotizador).
+Versión actual: **1.2.0-hu01** (HU-01 Cotizador: API y página web).
 
 ## Flujo de trabajo: Trunk Based Development
 
@@ -86,12 +86,23 @@ compartido `general`. Hay un máximo de 100 espacios en memoria (se descarta el 
 | GET | /api/health | Estado, versión, ambiente e historias encendidas |
 | GET | /api-docs | Swagger UI de esa instancia |
 
+## Frontend
+
+La web (React + TypeScript + Vite) está en `web/` y se sirve desde la misma URL que la API:
+`/` es el cotizador, `/ingresar` el destino de "Contratar", `/api/...` la API y `/api-docs` el Swagger.
+
+- Todos los controles tienen `data-testid` con la forma `<pagina>-<elemento>-<tipo>` (ver la guía de estilos del diseño).
+- `?semillero=<usuario>` en la URL fija el header `X-Semillero` para ese navegador; `?semillero=` lo borra.
+- La web muestra "Ambiente DEV/CERTI/LOCAL" arriba a la derecha; en PROD no se muestra.
+
 ## Desarrollo local
 
 ```bash
 npm install
-npm test                         # 72 pruebas: oráculo de primas, límites, contrato, aislamiento, flags
-APP_MODE=test npm run dev        # http://localhost:3000/api-docs
+npm test                         # 79 pruebas: oráculo de primas, límites, contrato, aislamiento, flags, web
+npm run build:web                # compila la web en web/dist
+APP_MODE=test npm run dev        # API y web en http://localhost:3000 (Swagger en /api-docs)
+npm run dev:web                  # opcional: web con recarga en caliente en http://localhost:5173
 ```
 
 En Windows PowerShell: `$env:APP_MODE="test"; npm run dev`.

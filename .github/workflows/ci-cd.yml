@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
       - run: npm ci
       - name: Tipos
         run: npm run typecheck
@@ -38,6 +41,8 @@ jobs:
         run: npm test
       - name: Contrato OpenAPI
         run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml
+      - name: Frontend (tipos y build)
+        run: npm run build:web
 
   imagen:
     name: Construir imagen

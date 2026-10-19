@@ -1,6 +1,6 @@
 {
   "name": "aurora-vida-app",
-  "version": "1.1.0-hu01",
+  "version": "1.2.0-hu01",
   "description": "API de Aurora Vida (venta digital de seguro de vida temporal) para el semillero QE",
   "private": true,
   "type": "commonjs",
@@ -10,7 +10,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --packages=external --minify --outfile=dist/app.js",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm run build:web && npm run build:api",
+    "build:api": "esbuild src/index.ts --bundle --platform=node --target=node20 --packages=external --minify --outfile=dist/app.js",
+    "build:web": "npm --prefix web ci && npm --prefix web run build",
     "start": "node dist/app.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
