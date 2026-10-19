@@ -1,7 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yaml';
@@ -12,10 +12,13 @@ import { Espacios, HEADER_SEMILLERO, middlewareSemillero } from './comun/semille
 import { rutasCotizaciones } from './cotizaciones/rutas';
 import { rutasSoporte } from './soporte/rutas';
 
-export const VERSION = '1.1.0-hu01';
+export const VERSION = '1.2.0-hu01';
 
 /** Ruta del contrato; en la imagen Docker está junto a dist/. */
 export const RUTA_CONTRATO = process.env.OPENAPI_PATH ?? join(process.cwd(), 'openapi', 'openapi.yaml');
+
+/** Carpeta del frontend compilado. */
+export const RUTA_WEB = process.env.WEB_PATH ?? join(process.cwd(), 'web', 'dist');
 
 type Spec = Record<string, any>;
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'];
@@ -122,6 +125,16 @@ export function crearApp(config: Config): App {
 
   if (config.modo === 'test') {
     app.use('/api/test', semillero, rutasSoporte());
+  }
+
+  // Frontend (web/dist): se sirve desde la misma URL que la API.
+  // Cualquier ruta que no sea de la API devuelve index.html (la web maneja sus rutas).
+  if (existsSync(join(RUTA_WEB, 'index.html'))) {
+    app.use(express.static(RUTA_WEB, { index: false, maxAge: '1h' }));
+    app.get(/^\/(?!api(\/|$)|api-docs(\/|$)|openapi\.yaml$).*/, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(join(RUTA_WEB, 'index.html'));
+    });
   }
 
   // El validador revisa requests y responses de /api/v1 contra el contrato.
